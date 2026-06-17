@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wps-cloud-download"
+version = "1.0.0"
+description = "Download WPS Cloud / KDocs files and folders through kdocs-cli."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "wps-cloud-download contributors" }
+]
+classifiers = [
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Utilities",
+]
+dependencies = []
+
+[project.scripts]
+wps-cloud-download = "wps_cloud.cli:main"
+wps-cloud = "wps_cloud.cli:main"

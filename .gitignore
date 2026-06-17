@@ -1,0 +1,36 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# Local downloads and smoke-test artifacts
+downloads/
+downloaded/
+exports/
+tmp/
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+*.pdf
+*.png
+*.jpg
+*.jpeg
+
+# Secrets and local auth material
+.env
+.env.*
+*.token
+*token*
+*secret*
+*cookie*
+kdocs-cli
+kdocs-cli.exe

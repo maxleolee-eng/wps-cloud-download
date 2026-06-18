@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+from .bulk_backup import RATE_LIMIT_EXIT_CODE, run_backup_folder, schedule_resume_launch_agent
 from .cli_core import DownloadError, KDocsCliClient, WpsCloudDownloader, safe_component
 from .kdocs_installer import KDOCS_CLI_VERSION, install_kdocs_cli
 
@@ -159,10 +161,97 @@ def cmd_download_all(args) -> int:
     return 1 if errors else 0
 
 
+def _resume_command(args) -> list[str]:
+    command = [
+        sys.executable or "python3",
+        "-m",
+        "wps_cloud.cli",
+        "--kdocs-cli",
+        args.kdocs_cli,
+        "--domain",
+        args.domain,
+        "--page-size",
+        str(args.page_size),
+        "backup-folder",
+        "--drive-id",
+        args.drive_id,
+        "--folder-id",
+        args.folder_id,
+        "--batch-dir",
+        str(args.batch_dir),
+        "--progress-every",
+        str(args.progress_every),
+        "--retries",
+        str(args.retries),
+        "--schedule-on-rate-limit",
+    ]
+    if args.contents_only:
+        command.append("--contents-only")
+    if args.dry_run:
+        command.append("--dry-run")
+    if args.no_resume_events:
+        command.append("--no-resume-events")
+    if args.max_files is not None:
+        command.extend(["--max-files", str(args.max_files)])
+    for ext in args.ext or []:
+        command.extend(["--ext", ext])
+    return command
+
+
+def cmd_backup_folder(args) -> int:
+    downloader = build_downloader(args)
+    result = run_backup_folder(
+        downloader,
+        args.drive_id,
+        args.folder_id,
+        args.batch_dir,
+        contents_only=args.contents_only,
+        include_exts=set(args.ext or []),
+        max_files=args.max_files,
+        dry_run=args.dry_run,
+        progress_every=args.progress_every,
+        retries=args.retries,
+        resume_events=not args.no_resume_events,
+    )
+    payload = {
+        "exit_code": result.exit_code,
+        "total_files": result.total_files,
+        "counts": dict(result.counts),
+        "bytes_done": result.bytes_done,
+        "batch_dir": str(result.batch_dir),
+        "files_dir": str(result.files_dir),
+        "manifest": str(result.manifest_path),
+        "progress": str(result.progress_path),
+        "events": str(result.events_path),
+        "failures": str(result.failures_path),
+        "html": str(result.html_path),
+        "report": str(result.report_path),
+    }
+    if result.exit_code == RATE_LIMIT_EXIT_CODE and args.schedule_on_rate_limit:
+        pythonpath = str(Path(__file__).resolve().parents[1])
+        if "PYTHONPATH" in os.environ:
+            pythonpath = f"{pythonpath}:{os.environ['PYTHONPATH']}"
+        schedule = schedule_resume_launch_agent(
+            args.batch_dir,
+            _resume_command(args),
+            pythonpath=pythonpath,
+            load=not args.no_launchctl_load,
+        )
+        payload["resume_schedule"] = {
+            "label": schedule.label,
+            "plist": str(schedule.plist_path),
+            "wps_resume_at": schedule.wps_resume_at,
+            "scheduled_resume_after": schedule.scheduled_resume_after,
+            "loaded": schedule.loaded,
+        }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return result.exit_code
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="wps-cloud-download",
-        description="wps-cloud-download CL V1.0: download WPS/KDocs cloud files through kdocs-cli.",
+        description="wps-cloud-download CL V1.1: download and back up WPS/KDocs cloud files through kdocs-cli.",
     )
     parser.add_argument("--kdocs-cli", default=find_kdocs_cli())
     parser.add_argument("--domain", default="wps365.com", choices=["wps365.com", "kdocs.cn", "wps.cn"])
@@ -215,6 +304,21 @@ def build_parser() -> argparse.ArgumentParser:
     all_files.add_argument("--dry-run", action="store_true")
     all_files.add_argument("--continue-on-error", action="store_true")
     all_files.set_defaults(func=cmd_download_all)
+
+    backup = sub.add_parser("backup-folder", help="Quota-aware recursive backup using drive list-files.")
+    backup.add_argument("--drive-id", required=True)
+    backup.add_argument("--folder-id", default="0")
+    backup.add_argument("--batch-dir", type=Path, required=True)
+    backup.add_argument("--contents-only", action="store_true")
+    backup.add_argument("--ext", action="append")
+    backup.add_argument("--max-files", type=int)
+    backup.add_argument("--dry-run", action="store_true")
+    backup.add_argument("--progress-every", type=int, default=25)
+    backup.add_argument("--retries", type=int, default=3)
+    backup.add_argument("--no-resume-events", action="store_true")
+    backup.add_argument("--schedule-on-rate-limit", action="store_true")
+    backup.add_argument("--no-launchctl-load", action="store_true")
+    backup.set_defaults(func=cmd_backup_folder)
     return parser
 
 

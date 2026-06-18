@@ -1,4 +1,4 @@
-# wps-cloud-download CL V1.0
+# wps-cloud-download CL V1.1
 
 Download WPS Cloud / KDocs files, folders, or search results from a personal logged-in account.
 
@@ -9,6 +9,9 @@ This project wraps the official `kdocs-cli` command line tool. It does not store
 - Download one WPS Cloud file by `drive_id` and `file_id`
 - Download a folder recursively
 - Download search results as a practical "download all" flow
+- Back up a folder or whole drive through recursive `list-files` enumeration
+- Resume large batches from event logs without re-downloading completed files
+- Stop on WPS daily quota/rate limits and record the safe resume time
 - Preserve cloud paths for bulk downloads
 - Verify returned `sha1` / `sha256` / `md5` hashes when WPS returns them
 - Skip already downloaded files when the local hash matches
@@ -19,7 +22,7 @@ This project wraps the official `kdocs-cli` command line tool. It does not store
 - It does not upload, move, rename, share, or delete cloud files.
 - It does not bundle the `kdocs-cli` binary in this repository.
 - It does not export or print WPS/KDocs tokens.
-- `download-all` depends on KDocs search pagination and should be treated as a practical export path, not an official complete backup API.
+- `download-all` depends on KDocs search pagination and should be treated as a practical export path, not a complete backup API. Use `backup-folder` for large backups.
 
 ## Install
 
@@ -93,6 +96,27 @@ wps-cloud-download download-folder \
   --contents-only
 ```
 
+Create a quota-aware recursive backup:
+
+```bash
+wps-cloud-download backup-folder \
+  --drive-id <drive_id> \
+  --folder-id 0 \
+  --batch-dir ./full-download-YYYYMMDD-HHMM \
+  --contents-only
+```
+
+Preview a backup without downloading files:
+
+```bash
+wps-cloud-download backup-folder \
+  --drive-id <drive_id> \
+  --folder-id 0 \
+  --batch-dir ./backup-preview \
+  --contents-only \
+  --dry-run
+```
+
 Preview bulk download:
 
 ```bash
@@ -120,6 +144,26 @@ wps-cloud-download download-all \
 --overwrite            # Overwrite existing files
 --continue-on-error    # Keep going after one file fails
 --contents-only        # Download folder contents without wrapping in folder name
+--max-files 100        # Limit backup-folder planning/download count
+--progress-every 25    # Write progress every N processed files
+```
+
+## Large Backup Outputs
+
+`backup-folder` creates a batch directory with:
+
+- `files/`: downloaded files, preserving the cloud folder structure
+- `wps_cloud_full_manifest.json`: recursive plan built from `drive list-files`
+- `download_events.jsonl`: per-file event log for resume
+- `download_progress.json`: current counts, last event, quota pause fields
+- `download_failures.json`: non-retryable and failed files
+- `WPS云盘全量下载报告.md`: human-readable Chinese summary report
+- `WPS云盘目录文件列表.html`: local browsable file tree
+
+If WPS returns a daily quota or frequent-call limit, the command exits with code `75`, writes `rate_limit_resume_at`, and writes `scheduled_resume_after` as WPS resume time plus five minutes. To create a macOS one-time LaunchAgent automatically when that happens, add:
+
+```bash
+--schedule-on-rate-limit
 ```
 
 ## Privacy And Safety

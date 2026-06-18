@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wps-cloud-download"
-version = "1.0.0"
+version = "1.1.0"
 description = "Download WPS Cloud / KDocs files and folders through kdocs-cli."
 readme = "README.md"
 requires-python = ">=3.10"
